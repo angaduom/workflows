@@ -15,12 +15,13 @@ This workflow provides an AI-powered pipeline for:
 ```
 workflows/rhoai-update/
 ├── .ambient/
-│   └── ambient.json          # Workflow configuration
+│   └── ambient.json           # Workflow configuration
 ├── .claude/
 │   └── commands/
-│       ├── oc-login.md       # OpenShift cluster login command
-│       └── rhoai-update.md   # RHOAI update command
-└── README.md                 # This file
+│       ├── oc-login.md        # OpenShift cluster login command
+│       ├── rhoai-version.md   # RHOAI version detection command
+│       └── rhoai-update.md    # RHOAI update command
+└── README.md                  # This file
 ```
 
 ## Commands
@@ -49,6 +50,28 @@ Or simply ask:
 - `OCP_SERVER` - OpenShift cluster API URL (e.g., `https://api.cluster.example.com:6443`)
 - `OCP_USERNAME` - Your OpenShift username
 - `OCP_PASSWORD` - Your OpenShift password
+
+### /rhoai-version
+
+Detect RHOAI version and build information.
+
+**What it does:**
+- Checks RHOAI operator subscription and ClusterServiceVersion
+- Reports DataScienceCluster status and component states
+- Lists all component images with SHA256 digests
+- Provides comprehensive version summary
+
+**Usage:**
+```
+/rhoai-version
+```
+
+Or simply ask:
+- "What version of RHOAI is installed?"
+- "Check RHOAI version"
+- "Show me RHOAI build info"
+
+**Note:** You must be logged into the cluster first (use `/oc-login`)
 
 ### /rhoai-update
 
