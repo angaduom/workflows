@@ -49,25 +49,44 @@ fi
 - Ask them to configure the credentials in their Ambient session
 - Do not proceed with login
 
-### Step 2: Verify oc CLI is Installed
+### Step 2: Install oc CLI if Not Available
 
-Check that the `oc` command is available:
+Automatically install the `oc` command if not available:
 
 ```bash
 # Check if oc is installed
 if ! command -v oc &> /dev/null; then
-  echo "❌ oc CLI not found. Please install OpenShift CLI first."
-  exit 1
+  echo "📦 oc CLI not found. Installing automatically..."
+
+  # Download oc CLI for Linux
+  curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
+
+  # Extract the binary
+  tar -xzf openshift-client-linux.tar.gz
+
+  # Move to /usr/local/bin for global access
+  sudo mv oc /usr/local/bin/
+  sudo mv kubectl /usr/local/bin/
+
+  # Make executable
+  sudo chmod +x /usr/local/bin/oc
+  sudo chmod +x /usr/local/bin/kubectl
+
+  # Clean up
+  rm -f openshift-client-linux.tar.gz README.md
+
+  echo "✅ oc CLI installed successfully"
 fi
 
 # Show oc version
 oc version --client
 ```
 
-**If oc is not installed:**
-- Inform the user that `oc` CLI is required
-- Provide installation instructions or link to OpenShift CLI downloads
-- Do not proceed with login
+**What happens:**
+- Automatically detects if `oc` is not installed
+- Downloads the latest stable OpenShift CLI for Linux
+- Installs it to `/usr/local/bin` for system-wide access
+- Continues to login without user intervention
 
 ### Step 3: Login to OpenShift Cluster
 
@@ -274,15 +293,14 @@ oc config current-context
 
 **Cause**: OpenShift CLI is not installed
 
-**Solution**:
-```bash
-# For Linux
-curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
-tar -xzf openshift-client-linux.tar.gz
-sudo mv oc /usr/local/bin/
+**Solution**: This command automatically installs `oc` CLI if not found. If you encounter this error, it means the automatic installation failed. Check:
+- Do you have sudo permissions?
+- Is the network connection working?
+- Can you access https://mirror.openshift.com/?
 
-# For macOS
-brew install openshift-cli
+The command will automatically download and install oc CLI from:
+```
+https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
 ```
 
 ### Issue 2: "error: x509: certificate signed by unknown authority"
