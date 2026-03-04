@@ -15,13 +15,14 @@ This workflow provides an AI-powered pipeline for:
 ```
 workflows/rhoai-update/
 ├── .ambient/
-│   └── ambient.json           # Workflow configuration
+│   └── ambient.json            # Workflow configuration
 ├── .claude/
 │   └── commands/
-│       ├── oc-login.md        # OpenShift cluster login command
-│       ├── rhoai-version.md   # RHOAI version detection command
-│       └── rhoai-update.md    # RHOAI update command
-└── README.md                  # This file
+│       ├── oc-login.md         # OpenShift cluster login command
+│       ├── rhoai-version.md    # RHOAI version detection command
+│       ├── rhoai-update.md     # RHOAI update command
+│       └── jenkins-trigger.md  # Jenkins build trigger command
+└── README.md                   # This file
 ```
 
 ## Commands
@@ -95,6 +96,31 @@ Or simply ask:
 - "What version of RHOAI is installed?"
 
 **Note:** You must be logged into the cluster first (use `/oc-login`)
+
+### /jenkins-trigger
+
+Trigger a Jenkins build job.
+
+**What it does:**
+- Validates Jenkins credentials (JENKINS_URL, JENKINS_API_TOKEN, JENKINS_USER)
+- Triggers the build via Jenkins API
+- Retrieves and saves the build number to `/tmp/.jenkins-last-build`
+- Enables monitoring with `/jenkins-poll`
+
+**Usage:**
+```
+/jenkins-trigger
+```
+
+Or simply ask:
+- "Trigger Jenkins build"
+- "Start Jenkins job"
+- "Run Jenkins build"
+
+**Required Environment Variables:**
+- `JENKINS_URL` - Full URL to the Jenkins job (e.g., `https://jenkins.example.com/job/Add%20Numbers/`)
+- `JENKINS_API_TOKEN` - API token for Jenkins authentication
+- `JENKINS_USER` - Jenkins username
 
 ## Prerequisites
 
