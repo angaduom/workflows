@@ -18,11 +18,37 @@ workflows/rhoai-update/
 │   └── ambient.json          # Workflow configuration
 ├── .claude/
 │   └── commands/
+│       ├── oc-login.md       # OpenShift cluster login command
 │       └── rhoai-update.md   # RHOAI update command
 └── README.md                 # This file
 ```
 
 ## Commands
+
+### /oc-login
+
+Login to OpenShift cluster using credentials from Ambient session.
+
+**What it does:**
+- Checks for required credentials (OCP_SERVER, OCP_USERNAME, OCP_PASSWORD)
+- Verifies `oc` CLI is installed
+- Executes login to the cluster
+- Verifies connection and displays cluster info
+
+**Usage:**
+```
+/oc-login
+```
+
+Or simply ask:
+- "Login to my cluster"
+- "Connect to OpenShift"
+- "Login to OCP"
+
+**Required Environment Variables:**
+- `OCP_SERVER` - OpenShift cluster API URL (e.g., `https://api.cluster.example.com:6443`)
+- `OCP_USERNAME` - Your OpenShift username
+- `OCP_PASSWORD` - Your OpenShift password
 
 ### /rhoai-update
 
@@ -45,10 +71,17 @@ Or simply ask:
 - "Upgrade to RHOAI 3.4 nightly"
 - "What version of RHOAI is installed?"
 
+**Note:** You must be logged into the cluster first (use `/oc-login`)
+
 ## Prerequisites
 
 - OpenShift cluster with RHOAI installed via OLM
-- `oc` CLI configured with cluster-admin access
+- `oc` CLI installed
+- Cluster credentials configured in Ambient session:
+  - `OCP_SERVER` - OpenShift cluster API URL
+  - `OCP_USERNAME` - Your OpenShift username
+  - `OCP_PASSWORD` - Your OpenShift password
+- Cluster admin permissions
 - RHOAI installed from `rhoai-catalog-dev` catalog
 
 ## Output Artifacts
