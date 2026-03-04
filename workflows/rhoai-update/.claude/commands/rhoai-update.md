@@ -1,11 +1,6 @@
----
-name: rhoai-update
-description: Update Red Hat OpenShift AI (RHOAI) to nightly builds. Usage - /rhoai-update (updates to latest) or /rhoai-update 3.4 (updates to specific version).
----
+# /rhoai-update - Update RHOAI to Nightly Build
 
-# RHOAI Nightly Build Updater
-
-This skill handles upgrading Red Hat OpenShift AI (RHOAI) operator installations to nightly/development builds.
+Update Red Hat OpenShift AI (RHOAI) to nightly builds or specific versions.
 
 ## Command Usage
 

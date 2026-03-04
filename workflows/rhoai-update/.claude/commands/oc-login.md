@@ -1,11 +1,6 @@
----
-name: oc-login
-description: Login to OpenShift cluster using credentials from Ambient session. Usage - /oc-login
----
+# /oc-login - Login to OpenShift Cluster
 
-# OpenShift Cluster Login
-
-This command handles logging into an OpenShift cluster using credentials configured in the Ambient session.
+Login to an OpenShift cluster using credentials configured in the Ambient session.
 
 ## Command Usage
 
