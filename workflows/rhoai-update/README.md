@@ -21,6 +21,7 @@ workflows/rhoai-update/
 │       ├── oc-login.md         # OpenShift cluster login command
 │       ├── rhoai-version.md    # RHOAI version detection command
 │       ├── rhoai-update.md     # RHOAI update command
+│       ├── rhoai-uninstall.md  # RHOAI uninstall command
 │       └── jenkins-trigger.md  # Jenkins build trigger command
 └── README.md                   # This file
 ```
@@ -96,6 +97,35 @@ Or simply ask:
 - "What version of RHOAI is installed?"
 
 **Note:** You must be logged into the cluster first (use `/oc-login`)
+
+### /rhoai-uninstall
+
+Completely uninstall RHOAI from an OpenShift cluster.
+
+**What it does:**
+- Removes RHOAI operator and subscriptions
+- Deletes custom resources (DataScienceCluster, DSCInitialization, etc.)
+- Cleans up webhooks and finalizers
+- Removes RHOAI namespaces
+- Deletes CRDs (optional)
+- Cleans up user data science projects (optional)
+
+**Usage:**
+```
+/rhoai-uninstall              # Standard forceful uninstall
+/rhoai-uninstall graceful     # Graceful uninstall followed by cleanup
+/rhoai-uninstall keep-crds    # Keep CRDs installed
+/rhoai-uninstall keep-all     # Keep CRDs and user resources
+```
+
+Or simply ask:
+- "Uninstall RHOAI from the cluster"
+- "Remove RHOAI completely"
+- "Clean up RHOAI installation"
+
+**Warning:** This will delete all RHOAI resources including user workbenches, models, and data. Backup important work first.
+
+**Note:** You must be logged into the cluster first (use `/oc-login`) and have cluster-admin permissions.
 
 ### /jenkins-trigger
 
