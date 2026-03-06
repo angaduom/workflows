@@ -5,10 +5,11 @@ Update Red Hat OpenShift AI (RHOAI) to nightly builds or specific versions.
 ## Command Usage
 
 - `/rhoai-update` - Updates to the latest available nightly build (currently 3.4)
-- `/rhoai-update 3.4` - Updates to RHOAI 3.4 nightly (latest image)
+- `/rhoai-update 3.4` - Updates to RHOAI 3.4 nightly (uses tag `rhoai-3.4`)
 - `/rhoai-update 3.5` - Updates to RHOAI 3.5 nightly (if available)
 - `/rhoai-update 3.3` - Downgrades to RHOAI 3.3 nightly
-- `/rhoai-update 3.4@sha256:abc123...` - Updates to specific SHA digest (for reproducibility)
+- `/rhoai-update 3.4@sha256:abc123...` - Updates to 3.4 with specific SHA digest
+- `/rhoai-update full-tag@sha256:abc123...` - Updates using full tag name with SHA (e.g., `rhoai-3.4-ea.2@sha256:ad96decb...`)
 
 ## When to Use This Skill
 
@@ -38,16 +39,48 @@ RHOAI nightly builds are distributed through catalog images:
 
 Parse the command argument:
 - If user runs `/rhoai-update` with NO argument → Default to **3.4** (current latest as of March 2026)
-- If user runs `/rhoai-update 3.4` → Use **3.4** (latest image)
-- If user runs `/rhoai-update 3.5` → Use **3.5** (if it exists)
-- If user runs `/rhoai-update 3.3` → Use **3.3**
-- If user runs `/rhoai-update 3.4@sha256:abc123...` → Use **3.4 with specific SHA digest**
+- If user runs `/rhoai-update 3.4` → Use tag `rhoai-3.4`
+- If user runs `/rhoai-update 3.5` → Use tag `rhoai-3.5` (if it exists)
+- If user runs `/rhoai-update 3.3` → Use tag `rhoai-3.3`
+- If user runs `/rhoai-update 3.4@sha256:abc123...` → Use tag `rhoai-3.4` with specific SHA digest
+- If user runs `/rhoai-update rhoai-3.4-ea.2@sha256:abc123...` → Use full tag name with specific SHA digest
 
-**SHA Digest Format:**
-When user provides a SHA digest (e.g., `3.4@sha256:352e38780ecee1298e927e3bc28b9d307dada2bb65ff0faa185ab15c455065a6`):
-- Extract version: `3.4`
-- Extract digest: `sha256:352e38780ecee1298e927e3bc28b9d307dada2bb65ff0faa185ab15c455065a6`
-- Full image: `quay.io/rhoai/rhoai-fbc-fragment:rhoai-3.4@sha256:352e38780ecee1298e927e3bc28b9d307dada2bb65ff0faa185ab15c455065a6`
+**Version Format Parsing:**
+
+```bash
+# Parse the version argument
+VERSION_ARG="$1"
+
+if [[ "$VERSION_ARG" == *"@sha256:"* ]]; then
+  # User provided SHA digest
+  if [[ "$VERSION_ARG" == rhoai-* ]]; then
+    # Full tag provided (e.g., rhoai-3.4-ea.2@sha256:...)
+    TAG="${VERSION_ARG%%@*}"
+    DIGEST="${VERSION_ARG#*@}"
+    IMAGE="quay.io/rhoai/rhoai-fbc-fragment:${TAG}@${DIGEST}"
+  else
+    # Version with SHA (e.g., 3.4@sha256:...)
+    VERSION="${VERSION_ARG%%@*}"
+    DIGEST="${VERSION_ARG#*@}"
+    TAG="rhoai-${VERSION}"
+    IMAGE="quay.io/rhoai/rhoai-fbc-fragment:${TAG}@${DIGEST}"
+  fi
+else
+  # No SHA digest, use version tag
+  if [[ "$VERSION_ARG" == rhoai-* ]]; then
+    # Full tag provided (e.g., rhoai-3.4-ea.2)
+    TAG="$VERSION_ARG"
+    IMAGE="quay.io/rhoai/rhoai-fbc-fragment:${TAG}"
+  else
+    # Simple version (e.g., 3.4)
+    VERSION="${VERSION_ARG:-3.4}"
+    TAG="rhoai-${VERSION}"
+    IMAGE="quay.io/rhoai/rhoai-fbc-fragment:${TAG}"
+  fi
+fi
+
+echo "Target image: $IMAGE"
+```
 
 **Determining the Latest Version:**
 
@@ -66,9 +99,21 @@ If the catalog fails to load with a newer version, fall back to 3.4.
 
 **Current Known Versions:**
 - 3.3 - Available ✅
-- 3.4 - Available ✅ (Current Latest)
+- 3.4 - Available ✅ (Current Latest GA)
 - 3.5 - Unknown (check availability first)
 - 3.6+ - Future versions
+
+**Early Access (EA) Builds:**
+EA builds (like 3.4-ea.2) are available but require explicit SHA digests:
+- EA builds are not tagged with simple version names
+- Users must provide the full tag+SHA from Konflux/Quay
+- Example: `/rhoai-update rhoai-3.4-ea.2@sha256:ad96decb1465f7fc330d1a385d913bae658ab8ca3a84478c6c13cfcb2c4e87cb`
+
+**Finding EA Build SHAs:**
+Users can find EA build SHAs from:
+1. Konflux build pipeline outputs
+2. Quay.io repository (https://quay.io/repository/rhoai/rhoai-fbc-fragment?tab=tags)
+3. Team communications about EA releases
 
 **Important:** When no version is specified, use **3.4** as the default. Update this default when newer versions are confirmed to be available.
 
@@ -227,6 +272,15 @@ oc get route -n redhat-ods-applications rhods-dashboard
 3. Update catalog source
 4. Monitor upgrade
 
+### Scenario C: User provides EA build with SHA
+
+Example: `/rhoai-update rhoai-3.4-ea.2@sha256:ad96decb1465f7fc330d1a385d913bae658ab8ca3a84478c6c13cfcb2c4e87cb`
+
+1. Parse full tag name and SHA digest
+2. Update catalog source with exact image reference
+3. Wait for automatic upgrade
+4. Report new version
+
 ### Scenario C: User has manual approval enabled
 
 If `installPlanApproval: Manual`:
@@ -336,6 +390,28 @@ Suggest:
 - Prevents automatic updates to newer nightlies
 - Useful for testing specific builds
 - Easy rollback to known-good state
+
+### Example 5: Update to EA Build with Full Tag+SHA
+
+**User**: `/rhoai-update rhoai-3.4-ea.2@sha256:ad96decb1465f7fc330d1a385d913bae658ab8ca3a84478c6c13cfcb2c4e87cb`
+
+**Claude**:
+1. Detects full tag name with SHA digest
+2. Parses: tag=rhoai-3.4-ea.2, digest=sha256:ad96decb...
+3. Checks current version (e.g., 3.4.0-ea.1)
+4. Reports: "Updating RHOAI to 3.4-ea.2 with specific build..."
+5. Updates catalog source to:
+   ```
+   quay.io/rhoai/rhoai-fbc-fragment:rhoai-3.4-ea.2@sha256:ad96decb1465f7fc330d1a385d913bae658ab8ca3a84478c6c13cfcb2c4e87cb
+   ```
+6. Monitors upgrade
+7. Reports: "✅ RHOAI updated to 3.4-ea.2 build"
+
+**When to use EA builds:**
+- Testing pre-release features before GA
+- Validating fixes in EA builds
+- Following a specific release train (e.g., ea.2 for additional testing)
+- User must obtain SHA from Konflux pipeline or Quay repository
 
 ## Troubleshooting Commands
 
