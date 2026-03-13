@@ -18,12 +18,14 @@ workflows/rhoai-update/
 │   └── ambient.json            # Workflow configuration
 ├── .claude/
 │   └── commands/
-│       ├── oc-login.md         # OpenShift cluster login command
-│       ├── rhoai-version.md    # RHOAI version detection command
-│       ├── rhoai-update.md     # RHOAI update command
-│       ├── rhoai-uninstall.md  # RHOAI uninstall command
-│       └── jenkins-trigger.md  # Jenkins build trigger command
-└── README.md                   # This file
+│       ├── oc-login.md          # OpenShift cluster login command
+│       ├── rhoai-version.md     # RHOAI version detection command
+│       ├── rhoai-update.md      # RHOAI update command
+│       ├── rhoai-uninstall.md   # RHOAI uninstall command
+│       ├── jenkins-trigger.md   # Jenkins build trigger command
+│       ├── setup-pipelines.md   # AI Pipeline server setup command
+│       └── setup-llamastack.md  # Llama Stack server setup command
+└── README.md                    # This file
 ```
 
 ## Commands
@@ -151,6 +153,129 @@ Or simply ask:
 - `JENKINS_URL` - Full URL to the Jenkins job (e.g., `https://jenkins.example.com/job/Add%20Numbers/`)
 - `JENKINS_API_TOKEN` - API token for Jenkins authentication
 - `JENKINS_USER` - Jenkins username
+
+### /setup-pipelines
+
+Setup AI Pipeline server on RHOAI with MinIO object storage.
+
+**What it does:**
+- Creates `minio-storage` and `ai-pipelines` namespaces
+- Deploys MinIO S3-compatible object storage (20Gi)
+- Creates S3 buckets for pipelines and data
+- Deploys DataSciencePipelinesApplication with MariaDB (10Gi)
+- Creates RHOAI data connections for dashboard integration
+- Verifies all components are healthy and ready
+
+**Usage:**
+```
+/setup-pipelines              # Full setup
+/setup-pipelines verify       # Verify existing installation
+```
+
+Or simply ask:
+- "Setup pipeline server"
+- "Configure AI pipelines"
+- "Deploy data science pipelines"
+
+**Prerequisites:**
+- RHOAI installed on the cluster
+- Logged into cluster with admin permissions (use `/oc-login`)
+- At least 50Gi available storage
+- Default StorageClass configured (e.g., `gp3-csi`)
+
+**What gets deployed:**
+- **minio-storage namespace**: MinIO with 20Gi PVC, console route
+- **ai-pipelines namespace**: Pipeline server with 7 components, MariaDB database
+- **S3 buckets**: `pipelines` (artifacts), `data` (training data)
+- **Data connections**: `pipeline-artifacts`, `pipeline-data`
+- **Credentials**: Randomly generated and stored in Kubernetes secrets
+
+**Access:**
+- MinIO Console: `https://minio-console-minio-storage.apps.<cluster-domain>`
+  - Credentials: `oc get secret minio-secret -n minio-storage -o jsonpath='{.data.accesskey}' | base64 -d`
+- Pipeline API: `https://ds-pipeline-pipelines-ai-pipelines.apps.<cluster-domain>`
+- RHOAI Dashboard: Navigate to Data Science Projects → ai-pipelines → Pipelines
+
+**Note:** The command is idempotent - it checks for existing components and only creates what's missing.
+
+### /setup-llamastack
+
+Setup Llama Stack on RHOAI with Keycloak authentication and model endpoints.
+
+**What it does:**
+- Deploys PostgreSQL database for Keycloak (5Gi)
+- Deploys Keycloak server with OAuth2 configuration
+- Creates Keycloak realm, client, and user for authentication
+- Configures Llama Stack server with LLM and embedding model endpoints
+- Sets up OAuth2 token-based authentication
+- Verifies end-to-end token generation and API access
+
+**Usage:**
+```
+/setup-llamastack           # Full setup with interactive model configuration
+/setup-llamastack verify    # Verify existing installation
+```
+
+Or simply ask:
+- "Setup Llama Stack"
+- "Configure Llama Stack server"
+- "Deploy Llama Stack with Keycloak"
+
+**Prerequisites:**
+- RHOAI installed on the cluster
+- Llama Stack Operator enabled in DataScienceCluster
+- Logged into cluster with admin permissions (use `/oc-login`)
+- At least one LLM model deployed (e.g., Llama 3.3 70B)
+- At least one embedding model deployed (e.g., Granite Embedding)
+
+**Note:** The command automatically installs Keycloak Operator if not already present.
+
+**Required Model Information:**
+You'll be prompted for:
+- LLM model ID, URL, token, provider ID
+- Embedding model ID, URL, token, provider ID, dimension
+- Target namespace for Llama Stack deployment
+
+**What gets deployed:**
+- **keycloak-operator namespace**: Red Hat build of Keycloak Operator
+- **postgresql namespace**: PostgreSQL database (5Gi) - service: `psql-keycloak`, database: `keycloak`
+  - Credentials: Randomly generated and stored in secret `keycloak-db-secret`
+- **keycloak namespace**: Keycloak server with OAuth2 configuration
+  - Realm: `llamastack`
+  - Client: `llama-stack-client` with direct access grants
+  - User: `llama-user` (password randomly generated and stored in secret)
+- **Target namespace** (e.g., llm-models): Llama Stack server with model configuration
+- **ConfigMap**: Complete Llama Stack config with LLM/embedding endpoints and Keycloak auth
+- **Credentials**: All passwords randomly generated and stored securely in Kubernetes secrets
+
+**Access:**
+- Keycloak Admin: Auto-detected from route
+- Llama Stack API: `http://llama-stack-<service>.<namespace>.svc.cluster.local:8321`
+- Token generation: Via OAuth2 password grant flow
+
+**Authentication:**
+```bash
+# Retrieve credentials from secrets
+KEYCLOAK_USER="llama-user"
+KEYCLOAK_PASS=$(oc get secret llama-user-password -n keycloak -o jsonpath='{.data.password}' | base64 -d)
+CLIENT_ID="llama-stack-client"
+
+# Get Keycloak URL
+KEYCLOAK_URL=$(oc get route -n keycloak -l app=keycloak -o jsonpath='{.items[0].spec.host}')
+
+# Get access token
+TOKEN=$(curl -k -d client_id=$CLIENT_ID \
+  -d username=$KEYCLOAK_USER \
+  -d password=$KEYCLOAK_PASS \
+  -d grant_type=password \
+  https://$KEYCLOAK_URL/realms/llamastack/protocol/openid-connect/token | jq -r .access_token)
+
+# Call Llama Stack API
+curl -H "Authorization: Bearer $TOKEN" \
+  http://llama-stack-<service>.<namespace>.svc.cluster.local:8321/models/list
+```
+
+**Note:** The command auto-detects deployed models when possible, or prompts for manual input if not found.
 
 ## Prerequisites
 
