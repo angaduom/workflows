@@ -407,6 +407,16 @@ echo "Current CSV: $CSV_NAME"
 echo "Current channel: $SUB_CHANNEL"
 echo "Current source: $SUB_SOURCE"
 
+# Step 1.5: Save current DSC component states to preserve user configuration
+echo ""
+echo "=== Saving Current DSC Component States ==="
+DSC_COMPONENTS=$(oc get datasciencecluster default-dsc -o json 2>/dev/null | jq -r '.spec.components // {}')
+echo "Saved component states:"
+echo "$DSC_COMPONENTS" | jq -r 'to_entries[] | "  \(.key): \(.value.managementState // "Unknown")"'
+
+# Save to file for restoration
+echo "$DSC_COMPONENTS" > /tmp/dsc-components-backup.json
+
 # Step 2: Delete the CSV (triggers OLM cleanup)
 echo ""
 echo "Deleting CSV to force reinstall..."
@@ -470,6 +480,47 @@ NEW_AUTORAG=$(oc get csv -n redhat-ods-operator -l operators.coreos.com/rhods-op
 echo "AutoML:  $(echo $NEW_AUTOML | grep -o 'sha256:[a-f0-9]\{12\}')"
 echo "AutoRAG: $(echo $NEW_AUTORAG | grep -o 'sha256:[a-f0-9]\{12\}')"
 
+# Step 8.5: Restore DSC component states
+echo ""
+echo "=== Restoring DSC Component States ==="
+# Wait for DSC to be created by operator
+for i in {1..30}; do
+  if oc get datasciencecluster default-dsc &>/dev/null; then
+    echo "DSC found, restoring component states..."
+    break
+  fi
+  echo "  Waiting for DSC to be created... (${i}s/300s)"
+  sleep 10
+done
+
+if [ -f /tmp/dsc-components-backup.json ]; then
+  # Read saved component states
+  SAVED_COMPONENTS=$(cat /tmp/dsc-components-backup.json)
+
+  # Get current (default) component states from new DSC
+  CURRENT_COMPONENTS=$(oc get datasciencecluster default-dsc -o json | jq -r '.spec.components // {}')
+
+  # Compare and restore any differences
+  echo "Comparing component states:"
+  echo "$SAVED_COMPONENTS" | jq -r 'to_entries[] | .key' | while read component; do
+    SAVED_STATE=$(echo "$SAVED_COMPONENTS" | jq -r --arg c "$component" '.[$c].managementState // "Unknown"')
+    CURRENT_STATE=$(echo "$CURRENT_COMPONENTS" | jq -r --arg c "$component" '.[$c].managementState // "Unknown"')
+
+    if [ "$SAVED_STATE" != "$CURRENT_STATE" ] && [ "$SAVED_STATE" != "Unknown" ]; then
+      echo "  $component: $CURRENT_STATE → $SAVED_STATE (restoring)"
+      oc patch datasciencecluster default-dsc --type=merge \
+        -p "{\"spec\":{\"components\":{\"$component\":{\"managementState\":\"$SAVED_STATE\"}}}}" 2>/dev/null || true
+    else
+      echo "  $component: $CURRENT_STATE (unchanged)"
+    fi
+  done
+
+  echo "✅ Component states restored"
+  rm -f /tmp/dsc-components-backup.json
+else
+  echo "⚠️  No backup file found, skipping component restoration"
+fi
+
 # Step 9: Wait for operator reconciliation
 echo ""
 echo "Waiting for operator to reconcile dashboard..."
@@ -521,6 +572,7 @@ echo "✅ Operator reinstalled with newer component images from catalog"
 - ✅ Dashboard deployment updated with new containers (e.g., `automl-ui`)
 - ✅ Federation config updated with routing for new components
 - ✅ Component pods restart with newer image digests
+- ✅ DSC component states preserved (e.g., `llamastackoperator`, `mlflowoperator` restored to previous `managementState`)
 
 **Downtime:** 2-5 minutes during operator and dashboard restart
 
@@ -541,6 +593,7 @@ oc get configmap federation-config -n redhat-ods-applications -o jsonpath='{.dat
 - OLM is designed to upgrade on version changes, not content changes
 - Future RHOAI releases should bump CSV version when images change
 - This scenario is specific to development catalogs with frequent rebuilds
+- **Component states are preserved**: The workflow saves and restores DSC component `managementState` settings (e.g., if `llamastackoperator` was `Managed`, it will be restored after reinstall even if the CSV defaults to `Removed`)
 
 
 ## Version Compatibility Matrix
