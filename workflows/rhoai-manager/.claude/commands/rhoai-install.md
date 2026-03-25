@@ -4,20 +4,39 @@ Install Red Hat OpenShift AI (RHOAI) on an OpenShift cluster using OLM (Operator
 
 ## Command Usage
 
-- `/rhoai-install` - Install latest RHOAI (currently 3.4, channel: beta)
-- `/rhoai-install 3.4` - Install RHOAI 3.4 (channel: beta)
-- `/rhoai-install 3.4-ea.2` - Install RHOAI 3.4 EA build 2 (channel: beta)
-- `/rhoai-install 3.4 -c beta` - Explicitly specify channel
-- `/rhoai-install 3.3 -c stable-3.3` - Install RHOAI 3.3 stable
-- `/rhoai-install 3.4@sha256:abc123...` - Install 3.4 with specific SHA digest
+### Development/Nightly Builds (default)
+```bash
+/rhoai-install                                    # Latest dev catalog (3.4 beta)
+/rhoai-install channel=beta                       # Explicit beta channel
+/rhoai-install image=quay.io/modh/rhoai-catalog:latest-release-3.5  # Custom image
+```
+
+### GA Production Releases
+```bash
+/rhoai-install catalog=redhat-operators           # GA catalog, stable channel
+/rhoai-install catalog=redhat-operators channel=fast     # GA catalog, fast channel
+/rhoai-install catalog=redhat-operators channel=stable   # GA catalog, stable channel
+```
+
+### Combined Parameters
+```bash
+/rhoai-install catalog=rhoai-catalog-dev channel=beta image=quay.io/modh/rhoai-catalog:custom
+```
+
+## Catalog Types
+
+| Catalog | Description | Use Case |
+|---------|-------------|----------|
+| `rhoai-catalog-dev` (default) | Development nightly builds | Testing EA/nightly builds |
+| `redhat-operators` | Red Hat certified GA releases | Production deployments |
 
 ## Available Channels
 
-| Channel | Description | Use Case |
-|---------|-------------|----------|
-| `beta` | Latest EA builds | Testing 3.4.0-ea.x builds |
-| `stable` | Latest GA release | Production stable |
-| `stable-3.3` | RHOAI 3.3.x GA | Stable 3.3 releases |
+| Channel | Description | Catalog Type |
+|---------|-------------|--------------|
+| `beta` (default) | Latest EA/nightly builds | rhoai-catalog-dev |
+| `fast` | Early GA releases | redhat-operators |
+| `stable` | Stable GA releases | redhat-operators |
 
 ## Prerequisites
 
@@ -32,42 +51,68 @@ Before running this command:
 
 ```bash
 # Default values
-VERSION_ARG=""
-CHANNEL="beta"  # Default for 3.4+ EA builds
+CATALOG_SOURCE="rhoai-catalog-dev"
+CATALOG_IMAGE=""
+CHANNEL="beta"
+CUSTOM_IMAGE_OVERRIDE=""
 
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    -c|--channel)
-      CHANNEL="$2"
-      shift 2
+# Parse key=value arguments
+for arg in "$@"; do
+  case "$arg" in
+    catalog=*)
+      CATALOG_SOURCE="${arg#*=}"
+      ;;
+    channel=*)
+      CHANNEL="${arg#*=}"
+      ;;
+    image=*)
+      CUSTOM_IMAGE_OVERRIDE="${arg#*=}"
       ;;
     *)
-      VERSION_ARG="$1"
-      shift
+      echo "⚠️  Unknown parameter: $arg (expected: catalog=, channel=, or image=)"
       ;;
   esac
 done
 
-# Build image URL
-if [[ -z "$VERSION_ARG" ]]; then
-  IMAGE="quay.io/rhoai/rhoai-fbc-fragment:rhoai-3.4"
-  echo "No version specified, defaulting to RHOAI 3.4"
-elif [[ "$VERSION_ARG" == *"/"* ]]; then
-  IMAGE="$VERSION_ARG"
-elif [[ "$VERSION_ARG" == rhoai-* ]]; then
-  IMAGE="quay.io/rhoai/rhoai-fbc-fragment:${VERSION_ARG}"
-else
-  IMAGE="quay.io/rhoai/rhoai-fbc-fragment:rhoai-${VERSION_ARG}"
-fi
+# Smart defaults based on catalog type
+if [[ "$CATALOG_SOURCE" == "rhoai-catalog-dev" ]]; then
+  # Development catalog - use custom image or default
+  if [[ -n "$CUSTOM_IMAGE_OVERRIDE" ]]; then
+    CATALOG_IMAGE="$CUSTOM_IMAGE_OVERRIDE"
+  else
+    CATALOG_IMAGE="quay.io/modh/rhoai-catalog:latest-release-3.4"
+  fi
+  CATALOG_NAMESPACE="openshift-marketplace"
+  USE_CUSTOM_CATALOG=true
 
-echo "Target image: $IMAGE"
-echo "Target channel: $CHANNEL"
+  echo "📦 Catalog: Development (rhoai-catalog-dev)"
+  echo "   Image: $CATALOG_IMAGE"
+  echo "   Channel: $CHANNEL"
+
+elif [[ "$CATALOG_SOURCE" == "redhat-operators" ]]; then
+  # GA catalog - uses built-in Red Hat operators catalog
+  CATALOG_IMAGE=""
+  CATALOG_NAMESPACE="openshift-marketplace"
+  USE_CUSTOM_CATALOG=false
+
+  echo "📦 Catalog: GA Production (redhat-operators)"
+  echo "   Channel: $CHANNEL"
+
+  if [[ -n "$CUSTOM_IMAGE_OVERRIDE" ]]; then
+    echo "⚠️  WARNING: image parameter ignored for redhat-operators catalog (uses built-in catalog)"
+  fi
+
+else
+  echo "❌ ERROR: Unknown catalog '$CATALOG_SOURCE'"
+  echo "   Supported: rhoai-catalog-dev, redhat-operators"
+  exit 1
+fi
 ```
 
-**Validation:**
-- Warn if version 3.4 uses channel other than `beta`
-- Suggest `stable-3.3` or `stable` for version 3.3
+**Parameter Summary:**
+- `catalog` - Catalog source to use (default: `rhoai-catalog-dev`)
+- `channel` - Subscription channel (default: `beta`)
+- `image` - Custom catalog image (only for rhoai-catalog-dev)
 
 ### Step 2: Verify Cluster Access
 
@@ -86,38 +131,120 @@ if oc get csv -n redhat-ods-operator 2>/dev/null | grep -q rhods-operator; then
 fi
 ```
 
-### Step 3: Clone olminstall Repository
+### Step 3: Create Operator Namespace
 
 ```bash
-OLMINSTALL_REPO="https://gitlab.cee.redhat.com/data-hub/olminstall.git"
-OLMINSTALL_DIR="/tmp/olminstall"
+OPERATOR_NAMESPACE="redhat-ods-operator"
 
-if [ -d "$OLMINSTALL_DIR" ]; then
-  echo "Updating existing clone..."
-  git -C "$OLMINSTALL_DIR" pull --rebase --quiet 2>/dev/null || true
+# Create namespace if it doesn't exist
+if ! oc get namespace "$OPERATOR_NAMESPACE" &>/dev/null; then
+  oc create namespace "$OPERATOR_NAMESPACE"
+  echo "✅ Created namespace: $OPERATOR_NAMESPACE"
 else
-  echo "Cloning from $OLMINSTALL_REPO..."
-  git clone --quiet "$OLMINSTALL_REPO" "$OLMINSTALL_DIR"
+  echo "✅ Namespace already exists: $OPERATOR_NAMESPACE"
 fi
-
-[[ -d "$OLMINSTALL_DIR" ]] || die "Failed to clone olminstall"
-echo "olminstall ready"
 ```
 
-### Step 4: Install RHOAI Operator
+### Step 4: Create CatalogSource (if using custom catalog)
 
 ```bash
-cd "$OLMINSTALL_DIR"
-bash setup.sh -t operator -i "$IMAGE" -u "$CHANNEL"
+if [[ "$USE_CUSTOM_CATALOG" == "true" ]]; then
+  echo "Creating custom CatalogSource: $CATALOG_SOURCE"
+
+  cat <<EOF | oc apply -f -
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: $CATALOG_SOURCE
+  namespace: $CATALOG_NAMESPACE
+spec:
+  displayName: "Red Hat OpenShift AI Dev Catalog"
+  image: $CATALOG_IMAGE
+  publisher: Red Hat
+  sourceType: grpc
+  updateStrategy:
+    registryPoll:
+      interval: 30m
+EOF
+
+  echo "✅ CatalogSource created: $CATALOG_SOURCE"
+
+  # Wait for catalog to be ready
+  echo "Waiting for CatalogSource to be ready..."
+  TIMEOUT=300
+  INTERVAL=10
+  ELAPSED=0
+
+  while [[ $ELAPSED -lt $TIMEOUT ]]; do
+    CATALOG_STATE=$(oc get catalogsource "$CATALOG_SOURCE" -n "$CATALOG_NAMESPACE" \
+      -o jsonpath='{.status.connectionState.lastObservedState}' 2>/dev/null || echo "")
+
+    if [[ "$CATALOG_STATE" == "READY" ]]; then
+      echo "✅ CatalogSource is READY"
+      break
+    fi
+
+    sleep "$INTERVAL"
+    ELAPSED=$((ELAPSED + INTERVAL))
+    echo "   CatalogSource state: ${CATALOG_STATE:-Unknown} (${ELAPSED}s/${TIMEOUT}s)"
+  done
+
+  [[ "$CATALOG_STATE" == "READY" ]] || echo "⚠️  WARNING: CatalogSource not READY after ${TIMEOUT}s"
+else
+  echo "Using built-in catalog: $CATALOG_SOURCE"
+fi
+```
+
+### Step 5: Create OperatorGroup
+
+```bash
+# Create OperatorGroup in operator namespace
+cat <<EOF | oc apply -f -
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: rhods-operator
+  namespace: $OPERATOR_NAMESPACE
+spec:
+  targetNamespaces:
+  - $OPERATOR_NAMESPACE
+EOF
+
+echo "✅ OperatorGroup created"
+```
+
+### Step 6: Create Subscription
+
+```bash
+# Create Subscription
+cat <<EOF | oc apply -f -
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: rhods-operator
+  namespace: $OPERATOR_NAMESPACE
+spec:
+  channel: $CHANNEL
+  installPlanApproval: Automatic
+  name: rhods-operator
+  source: $CATALOG_SOURCE
+  sourceNamespace: $CATALOG_NAMESPACE
+EOF
+
+echo "✅ Subscription created"
+echo "   Channel: $CHANNEL"
+echo "   Source: $CATALOG_SOURCE"
+
+sleep 5
 ```
 
 This creates:
 - **Namespace**: `redhat-ods-operator`
-- **CatalogSource**: `rhoai-catalog-dev` in `openshift-marketplace`
-- **Subscription**: `rhoai-operator-dev` pointing to catalog
+- **CatalogSource**: Custom catalog (if using dev catalog) or uses built-in `redhat-operators`
+- **Subscription**: `rhods-operator` pointing to the chosen catalog
 - **OperatorGroup**: For the operator namespace
 
-### Step 5: Wait for Operator CSV
+### Step 7: Wait for Operator CSV
 
 ```bash
 # Wait up to 600 seconds for CSV to reach Succeeded
@@ -148,7 +275,7 @@ done
 [[ "$CSV_PHASE" == "Succeeded" ]] || die "Operator did not reach Succeeded phase within ${TIMEOUT}s"
 ```
 
-### Step 6: Create DataScienceCluster
+### Step 8: Create DataScienceCluster
 
 ```bash
 # Wait for DSCInitialization
@@ -182,7 +309,7 @@ else
 fi
 ```
 
-### Step 7: Configure DSC Components
+### Step 9: Configure DSC Components
 
 ```bash
 # Wait for DSC to exist
@@ -234,7 +361,7 @@ sleep 5
 - `mlflowoperator`: For ML experiment tracking
 - `trainer`: Removed (requires JobSet operator, not available by default)
 
-### Step 8: Wait for DSC Ready
+### Step 10: Wait for DSC Ready
 
 ```bash
 # Wait for DataScienceCluster to be Ready
@@ -265,7 +392,7 @@ if [[ "$DSC_PHASE" != "Ready" ]]; then
 fi
 ```
 
-### Step 9: Wait for Dashboard
+### Step 11: Wait for Dashboard
 
 ```bash
 # Wait for dashboard deployment to be ready
@@ -293,7 +420,7 @@ oc get deployment rhods-dashboard -n redhat-ods-applications \
   echo "  Dashboard deployment not found"
 ```
 
-### Step 10: Configure Dashboard Features
+### Step 12: Configure Dashboard Features
 
 ```bash
 # Wait for OdhDashboardConfig to exist
@@ -339,7 +466,7 @@ else
 fi
 ```
 
-### Step 11: Verify Installation
+### Step 13: Verify Installation
 
 ```bash
 echo ""
@@ -366,8 +493,8 @@ echo "✅ RHOAI installation complete!"
 
 ## Output
 
-The command creates a report at `artifacts/rhoai-update/reports/install-report-[timestamp].md` with:
-- Installation parameters (version, channel, image)
+The command creates a report at `artifacts/rhoai-manager/reports/install-report-[timestamp].md` with:
+- Installation parameters (catalog source, channel, image)
 - Operator CSV details
 - DataScienceCluster status
 - Configured components
@@ -376,22 +503,33 @@ The command creates a report at `artifacts/rhoai-update/reports/install-report-[
 
 ## Usage Examples
 
+### Development/Testing
 ```bash
-# Install latest RHOAI 3.4 (beta channel)
+# Install latest dev build (default: beta channel, dev catalog)
 /rhoai-install
 
-# Install RHOAI 3.4 EA build 2
-/rhoai-install 3.4-ea.2
+# Install from dev catalog with custom image
+/rhoai-install image=quay.io/modh/rhoai-catalog:latest-release-3.5
 
-# Install RHOAI 3.3 stable
-/rhoai-install 3.3 -c stable-3.3
+# Install from dev catalog with specific channel
+/rhoai-install channel=beta
+```
 
-# Install with specific SHA digest
-/rhoai-install 3.4@sha256:abc123def456...
+### Production GA
+```bash
+# Install from GA catalog (stable channel)
+/rhoai-install catalog=redhat-operators channel=stable
+
+# Install from GA catalog (fast channel for early GA releases)
+/rhoai-install catalog=redhat-operators channel=fast
+
+# Install from GA catalog with default stable channel
+/rhoai-install catalog=redhat-operators
 ```
 
 Or simply ask:
-- "Install RHOAI 3.4"
+- "Install RHOAI from dev catalog"
+- "Install RHOAI from production catalog"
 - "Set up RHOAI on my cluster"
 - "Install latest RHOAI nightly"
 

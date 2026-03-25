@@ -59,7 +59,7 @@ Or simply ask:
 Install RHOAI from scratch on an OpenShift cluster.
 
 **What it does:**
-- Sets up OLM catalog source for RHOAI nightly builds
+- Sets up OLM catalog source (dev or GA production)
 - Creates operator namespace and subscription
 - Waits for ClusterServiceVersion (CSV) to be ready
 - Creates DataScienceCluster with component configuration
@@ -68,14 +68,26 @@ Install RHOAI from scratch on an OpenShift cluster.
 - Provides detailed installation summary
 
 **Usage:**
+```bash
+# Development/Nightly builds (default)
+/rhoai-install                                    # Latest dev catalog
+/rhoai-install channel=beta                       # Dev catalog, beta channel
+/rhoai-install image=quay.io/modh/rhoai-catalog:latest-release-3.5
+
+# GA Production releases
+/rhoai-install catalog=redhat-operators           # GA catalog, stable channel
+/rhoai-install catalog=redhat-operators channel=fast     # GA catalog, fast channel
 ```
-/rhoai-install
-```
+
+**Parameters:**
+- `catalog` - Catalog source (`rhoai-catalog-dev` for nightly, `redhat-operators` for GA)
+- `channel` - Subscription channel (`beta`, `fast`, or `stable`)
+- `image` - Custom catalog image (only for `rhoai-catalog-dev`)
 
 Or simply ask:
 - "Install RHOAI on the cluster"
-- "Deploy RHOAI from scratch"
-- "Set up RHOAI"
+- "Deploy RHOAI from production catalog"
+- "Set up RHOAI for testing"
 
 **Prerequisites:**
 - OpenShift cluster (version 4.12+)
@@ -89,7 +101,7 @@ Or simply ask:
 - **DataScienceCluster**: Custom resource managing all RHOAI components
 - **Component operators**: Dashboard, Workbenches, Model Serving, Pipelines, etc.
 
-**Note:** The installation uses the `rhoai-catalog-dev` catalog for nightly builds.
+**Note:** Defaults to `rhoai-catalog-dev` for nightly builds. Use `catalog=redhat-operators` for GA production releases.
 
 ### /rhoai-version
 
