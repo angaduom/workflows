@@ -16,7 +16,8 @@ Update an existing Red Hat OpenShift AI (RHOAI) installation to a newer nightly 
 | Channel | Description | Use Case |
 |---------|-------------|----------|
 | `beta` | Latest EA builds | Testing 3.4.0-ea.x builds |
-| `stable` | Latest GA release | Production stable |
+| `stable` | Latest GA release across all versions | Production stable |
+| `stable-3.4` | RHOAI 3.4.x GA | Latest 3.4 GA nightly (recommended) |
 | `stable-3.3` | RHOAI 3.3.x GA | Stable 3.3 releases |
 
 ## Prerequisites
